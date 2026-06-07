@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SearchVector - локальний SVM пошук</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <section id="home-page" class="page active">
+    <main class="home">
+      <div class="logo">Search<span>Vector</span></div>
+      <p class="subtitle">Локальний пошук текстових документів з використанням методу опорних векторів</p>
+
+      <div class="search-box">
+        <input id="main-input" type="text" placeholder="Введіть пошуковий запит..." autocomplete="off">
+        <button id="main-search-btn">Знайти</button>
+      </div>
+
+      <p class="stats">Проіндексовано документів: <strong>{{ doc_count }}</strong></p>
+
+      <div class="examples">
+        <span>Приклади:</span>
+        <button class="chip" data-query="метод опорних векторів">метод опорних векторів</button>
+        <button class="chip" data-query="пошукові системи">пошукові системи</button>
+        <button class="chip" data-query="класифікація тексту">класифікація тексту</button>
+      </div>
+    </main>
+  </section>
+
+  <section id="results-page" class="page">
+    <header class="topbar">
+      <button class="brand" id="home-btn">SearchVector</button>
+      <div class="search-box compact">
+        <input id="results-input" type="text" placeholder="Пошук..." autocomplete="off">
+        <button id="results-search-btn">Знайти</button>
+      </div>
+    </header>
+
+    <main class="results">
+      <p id="results-meta" class="results-meta"></p>
+      <div id="results-list"></div>
+      <div id="no-results" class="empty hidden">
+        <h2>Нічого не знайдено</h2>
+        <p>Спробуйте інший запит або додайте більше `.txt` файлів у папку <code>documents/</code>.</p>
+      </div>
+    </main>
+  </section>
+
+  <div id="loader" class="loader hidden">Пошук...</div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
