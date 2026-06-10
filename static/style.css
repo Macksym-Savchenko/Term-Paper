@@ -80,8 +80,7 @@ body {
 }
 
 .search-box button,
-.brand,
-.chip {
+.brand {
   border: 0;
   cursor: pointer;
   color: white;
@@ -94,8 +93,7 @@ body {
   font-weight: 700;
 }
 
-.stats,
-.examples {
+.stats {
   color: var(--muted);
 }
 
@@ -105,28 +103,6 @@ body {
 
 .stats strong {
   color: var(--text);
-}
-
-.examples {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.chip {
-  padding: 8px 13px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--muted);
-}
-
-.chip:hover {
-  color: var(--text);
-  border-color: var(--accent);
 }
 
 .topbar {
