@@ -120,6 +120,8 @@ class SearchEngine:
         for filename in sorted(os.listdir(self.documents_folder)):
             if not filename.lower().endswith(".txt"):
                 continue
+            if re.match(r"^\d{4}_", filename):
+                continue
 
             path = os.path.join(self.documents_folder, filename)
             try:
