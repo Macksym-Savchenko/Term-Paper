@@ -96,11 +96,4 @@ resultsInput.addEventListener("keydown", (event) => {
   }
 });
 
-document.querySelectorAll(".chip").forEach((chip) => {
-  chip.addEventListener("click", () => {
-    mainInput.value = chip.dataset.query;
-    doSearch(chip.dataset.query);
-  });
-});
-
 mainInput.focus();
