@@ -16,6 +16,9 @@ class SearchEngine:
     запит ранжується за оцінкою SVM і косинусною подібністю.
     """
 
+    MIN_PREFIX_LEN = 3
+    MIN_ROOT_LEN = 5
+
     def __init__(self, documents_folder: str):
         self.documents_folder = documents_folder
         self.documents = {}
@@ -56,9 +59,10 @@ class SearchEngine:
         if not self.is_indexed or not query.strip():
             return []
 
-        query_vector = self.vectorizer.transform([query])
+        expanded_query = self._expand_query(query)
+        query_vector = self.vectorizer.transform([expanded_query])
         if query_vector.nnz == 0:
-            return []
+            return self._substring_search(query, top_n)
 
         cosine_scores = self._cosine_similarity(query_vector, self.tfidf_matrix)
 
@@ -74,6 +78,69 @@ class SearchEngine:
         else:
             scores = self._minmax_normalize(cosine_scores)
 
+        results = self._collect_results(scores, query, top_n)
+        if results:
+            return results
+
+        return self._substring_search(query, top_n)
+
+    def _expand_query(self, query: str) -> str:
+        """Expand the query with similar vocabulary words by shared word root."""
+        tokens = re.findall(r"\w+", query.lower())
+        if not tokens:
+            return query
+
+        expanded: list[str] = []
+        seen: set[str] = set()
+
+        def add_term(term: str) -> None:
+            if term not in seen:
+                seen.add(term)
+                expanded.append(term)
+
+        for token in tokens:
+            add_term(token)
+
+        vocabulary_words = self._vocabulary_words()
+        for token in tokens:
+            if len(token) < self.MIN_PREFIX_LEN:
+                continue
+
+            for word in vocabulary_words:
+                if self._share_word_root(token, word):
+                    add_term(word)
+
+        return " ".join(expanded)
+
+    def _vocabulary_words(self) -> set[str]:
+        words: set[str] = set()
+        for term in self.vectorizer.get_feature_names_out():
+            for part in term.lower().split():
+                words.add(part)
+        return words
+
+    @classmethod
+    def _common_prefix_length(cls, left: str, right: str) -> int:
+        limit = min(len(left), len(right))
+        index = 0
+        while index < limit and left[index] == right[index]:
+            index += 1
+        return index
+
+    @classmethod
+    def _share_word_root(cls, left: str, right: str) -> bool:
+        if len(left) < cls.MIN_PREFIX_LEN or len(right) < cls.MIN_PREFIX_LEN:
+            return False
+
+        shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
+        if longer.startswith(shorter) and len(shorter) >= cls.MIN_ROOT_LEN:
+            return True
+
+        return cls._common_prefix_length(left, right) >= cls.MIN_ROOT_LEN
+
+    def _collect_results(
+        self, scores: np.ndarray, query: str, top_n: int
+    ) -> list[dict]:
         ranked_indices = np.argsort(scores)[::-1]
         results = []
 
@@ -90,6 +157,48 @@ class SearchEngine:
                     "title": self._extract_title(filename, text),
                     "snippet": self._extract_snippet(text, query),
                     "score": round(score * 100, 1),
+                    "word_count": len(text.split()),
+                }
+            )
+
+        return results
+
+    def _substring_search(self, query: str, top_n: int) -> list[dict]:
+        """Fallback search when TF-IDF cannot map the query to known terms."""
+        tokens = re.findall(r"\w+", query.lower())
+        if not tokens:
+            return []
+
+        scored: list[tuple[float, str]] = []
+
+        for filename in self.filenames:
+            text = self.documents[filename]
+            text_lower = text.lower()
+            score = 0.0
+
+            for token in tokens:
+                if token in text_lower:
+                    score += 2.0
+
+                for word in re.findall(r"\w+", text_lower):
+                    if self._share_word_root(token, word):
+                        score += 1.0
+
+            if score > 0:
+                scored.append((score, filename))
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        max_score = scored[0][0] if scored else 1.0
+        results = []
+
+        for score, filename in scored[:top_n]:
+            text = self.documents[filename]
+            results.append(
+                {
+                    "filename": filename,
+                    "title": self._extract_title(filename, text),
+                    "snippet": self._extract_snippet(text, query),
+                    "score": round((score / max_score) * 100, 1),
                     "word_count": len(text.split()),
                 }
             )
@@ -168,14 +277,26 @@ class SearchEngine:
             return first_line
         return filename.replace(".txt", "").replace("_", " ").title()
 
-    @staticmethod
-    def _extract_snippet(text: str, query: str, length: int = 220) -> str:
+    @classmethod
+    def _find_match_position(cls, text_lower: str, token: str) -> int:
+        position = text_lower.find(token)
+        if position != -1:
+            return position
+
+        for match in re.finditer(r"\w+", text_lower):
+            if cls._share_word_root(match.group(0), token):
+                return match.start()
+
+        return -1
+
+    @classmethod
+    def _extract_snippet(cls, text: str, query: str, length: int = 220) -> str:
         query_words = re.findall(r"\w+", query.lower())
         text_lower = text.lower()
 
         start = 0
         for word in query_words:
-            position = text_lower.find(word)
+            position = cls._find_match_position(text_lower, word)
             if position != -1:
                 start = max(0, position - 70)
                 break
@@ -188,7 +309,19 @@ class SearchEngine:
 
         safe_snippet = html.escape(snippet)
         for word in query_words:
-            pattern = re.compile(re.escape(word), re.IGNORECASE)
+            if len(word) >= cls.MIN_ROOT_LEN:
+                pattern = re.compile(
+                    re.escape(word[: cls.MIN_ROOT_LEN]) + r"\w*",
+                    re.IGNORECASE,
+                )
+            elif len(word) >= cls.MIN_PREFIX_LEN:
+                pattern = re.compile(
+                    r"\w*" + re.escape(word) + r"\w*",
+                    re.IGNORECASE,
+                )
+            else:
+                pattern = re.compile(re.escape(word), re.IGNORECASE)
+
             safe_snippet = pattern.sub(
                 lambda match: f"<mark>{match.group(0)}</mark>",
                 safe_snippet,
